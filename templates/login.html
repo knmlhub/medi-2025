@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>ログイン</title>
+</head>
+<body>
+	<form action="{{ url_for('login') }}" method="post">
+        <label for="name">ユーザー名:</label><br>
+        <input type="text" id="username" name="username"><br>
+        <label for="password">パスワード:</label><br>
+        <input type="password" id="password" name="password"><br>
+        <input type="submit" value="ログイン">
+    </form>
+    <br>
+    <a href="{{ url_for('register') }}">新規登録</a>
+    <a href="{{ url_for('index') }}">もどる</a>
+</body>
+</html>

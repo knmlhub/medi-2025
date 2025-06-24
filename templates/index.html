@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>web日記帳</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+
+<body>
+    <header>
+        <nav class="navbar" role="navigation" aria-label="main navigation">
+            <div class="navbar-brand">
+                <a href="/">Home</a>
+            </div>
+            <div class="navbar-end">
+                <div class="navbar-item">
+                    <div class="buttons">
+                        {% if 'user_id' in session %}
+                            <a href="{{ url_for('logout') }}">ログアウト</a>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+    </header>
+
+    <main>
+
+        <div class="content">
+            <ul>
+                {% for task in tasks %}
+                <li>
+                    <div>{{ task['title'] }}</div>
+                    <div>日付: {{ task['date'] }}</div>
+                    <div>内容: {{ task['text'] }}</div>
+                    <form action="delete" method="post">
+                        <input type="hidden" name="id" value="{{ task['id'] }}">
+                        コレできてない→
+                        <input class="button is-small" type="submit" value="削除">
+                    </form>
+                </li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <a class="button is-primary" href='/new'>日記を書く</a>
+    </main>
+    
+    <a href="{{ url_for('login') }}">ログイン</a>
+    <a href="{{ url_for('register') }}">新規登録</a>
+</body>
+
+</html>
