@@ -6,8 +6,10 @@ import base64
 import hashlib
 import secrets
 
-HASH_ALGORITHM = "pbkdf2_sha256"
+import psycopg2
+import psycopg2.extras
 
+HASH_ALGORITHM = "pbkdf2_sha256"
 app = Flask(__name__)
 app.secret_key = b"opensesame"
 
@@ -36,10 +38,17 @@ def verify_password(password, password_hash):
 #ここまでパスワードをどうするかの云々
 
 def get_db():
-    db = sqlite3.connect("todo.db")
-    # 結果にカラム名でアクセスできるようにする
-    db.row_factory = sqlite3.Row
-    return db
+    conn = psycopg2.connect(
+        host="ep-morning-sea-a1daf9b1-pooler.ap-southeast-1.aws.neon.tech",
+        database="neondb",
+        user="neondb_owner",
+        password="npg_tCTxuWfA3km1",
+        port=5432,
+        sslmode="require"
+    )
+    return conn
+
+
 
 
 def format_datetime(dt):
@@ -74,19 +83,24 @@ def login():
     username = request.form.get("username")
     print(username)
     if not username:
+        print('名前が違う')
         return render_template("login.html", error_user=True, form=request.form)
 
     password = request.form.get("password")
     if not password:
         return render_template("login.html", error_password=True, form=request.form)
+        print('パスワードが違う')
 
     db = get_db()
 
     try:
         with db:
-            row = db.execute(
-                "SELECT * FROM users where name = ?", (username,)
-            ).fetchone()
+            cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+            cursor.execute(
+                "SELECT * FROM users where name = %(name)s", {"name":username}
+            )
+            row = cursor.fetchone()
             #ここのエラー治った
             verified = row is not None and verify_password(
                 password, row["password_hash"]
@@ -96,6 +110,7 @@ def login():
                 session["user_id"] = row["user_id"]
                 return redirect(url_for("index"))
             else:
+                print('verifiedできてない')
                 return render_template("login.html", error_login=True)
     finally:
         db.close()
@@ -111,23 +126,19 @@ def register():
     username = request.form.get("username")
     password = request.form.get("password")
     
-    # if not username or len(username) < 3:
-    #     return render_template("register.html", error_user=True, form=request.form)
-
-    # if not password:
-    #     return render_template("register.html", error_password=True, form=request.form)
-
-    # password_confirmation = request.form.get("password_confirmation")
-    # if password != password_confirmation:
-    #     return render_template("register.html", error_confirm=True, form=request.form)
 	
     ###ここでdbからユーザー認証してる
     db = get_db()
     try:
         with db:
-            res = db.execute(
-                "SELECT * FROM users WHERE name = ?", (username,)
-            ).fetchall()
+            #ここでミスってる_
+            #↑なおした！！
+            cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+
+            res = cursor.execute(
+                "SELECT * FROM users WHERE name = %(name)s", {"name": username}
+            )
+            res = cursor.fetchall()
             if len(res) != 0:
                 return render_template(
                     "register.html", error_unique=True, form=request.form
@@ -135,8 +146,8 @@ def register():
 
             #ここのカラム名みすってた
             password_hash = hash_password(password,)
-            db.execute(
-                "INSERT INTO users (name, password_hash) VALUES (?, ?)",
+            cursor.execute(
+                "INSERT INTO users (name, password_hash) VALUES (%s, %s)",
                 (username, password_hash),
             )
 
@@ -152,46 +163,34 @@ def index():
     if "user_id" not in session:
         return redirect("/login")
 
-    query_select = """
-        SELECT dia_id, text, date, user_id,title
-        FROM diary
+    # query_select = """
+    #     SELECT dia_id, text, date, user_id,title
+    #     FROM diary
+    # """
+    query = """
+        SELECT * FROM diary
+        WHERE user_id = %s
+        ORDER BY date DESC
     """
-    query_where = "WHERE user_id = ?"
-
-    # すべてのタスクを表示するか？ (bool)
-    # show_all = request.args.get("all") == "1"
-    # if show_all:
-    #     # すべてのタスクを完了時刻が新しい順に選択する（NULLはSQLiteでは最も小さい値とみなされる）
-    #     # 完了時刻が同じ場合（NULLの場合）、作成時刻が新しい順にする
-    #     query_order = "ORDER BY completed_at DESC, created_at DESC"
-    #     # query_order = query + " ORDER BY completed_at DESC, created_at DESC"
-    #     # query_order = f"{query} ORDER BY completed_at DESC, created_at DESC"
-    # else:
-    #     # 未完了のタスクを作成時刻が新しい順に選択する
-    #     query_where += "AND completed_at IS NULL"
-    #     query_order = "ORDER BY created_at DESC"
-        
-    query = f"{query_select} {query_where}"
+    #query_where = "WHERE user_id = %s"
+    #query = f"{query_select} {query_where}"
 
     # データベースに接続
     db = get_db()
     try:
         with db:
-            # クエリを実行
-            cursor = db.execute(query, (session["user_id"],))
+            # クエリを実行            
+            cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cursor.execute(query, (session["user_id"],))
 
             tasks = []
             for row in cursor:
                 task = dict(row)
-                # 日付時刻をフォーマット
-                # task["created_at"] = format_datetime(task["created_at"])
-                # task["completed_at"] = format_datetime(task["completed_at"])
-                # task["due_date"] = format_date(task["due_date"])
                 tasks.append(task)
     finally:
         # 接続をクローズ
         db.close()
-        print(tasks)
+        #print(tasks)
 
     return render_template("index.html", tasks=tasks)
 
@@ -215,13 +214,14 @@ def create():
 
     query = """
         INSERT INTO diary (user_id, title, text, date)
-        VALUES (?, ?, ?, ?)
+        VALUES (%s, %s, %s, %s)
     """
 
     db = get_db()
     try:
         with db:
-            db.execute(
+            cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cursor.execute(
                 query, (session["user_id"], title, text, date)
             )  # palceholderにタプルで与える
     finally:
@@ -238,14 +238,19 @@ def complete():
 
     dia_id = request.form.get("id")
     query = """
-        UPDATE diary SET text = ''
-        WHERE dia_id = ? AND user_id = ?
+        DELETE  FROM diary
+        WHERE dia_id = %s AND user_id = %s
     """
+    print(dia_id)
+    print("dia_id")
 
     db = get_db()
     try:
         with db:
-            db.execute(query, (dia_id, session["user_id"]))
+            cursor = db.cursor(cursor_factory=psycopg2.extras.DictCursor)
+            cursor.execute(
+                query, (dia_id, session['user_id'])            
+            )
     finally:
         db.close()
 

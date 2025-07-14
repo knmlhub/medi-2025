@@ -36,8 +36,7 @@
                     <div>日付: {{ task['date'] }}</div>
                     <div>内容: {{ task['text'] }}</div>
                     <form action="delete" method="post">
-                        <input type="hidden" name="id" value="{{ task['id'] }}">
-                        コレできてない→
+                        <input type="hidden" name="id" value="{{ task['dia_id'] }}">
                         <input class="button is-small" type="submit" value="削除">
                     </form>
                 </li>
